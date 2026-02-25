@@ -26,6 +26,16 @@ deploy:
 		./ root@65.109.142.30:/opt/telegram-ai-bot/
 	ssh root@65.109.142.30 "cd /opt/telegram-ai-bot && docker compose up -d --build"
 
+# Database migrations
+migrate:
+	alembic upgrade head
+
+migrate-down:
+	alembic downgrade -1
+
+migrate-new:
+	@read -p "Migration message: " msg; alembic revision -m "$$msg"
+
 # Testing
 test:
 	pytest -v

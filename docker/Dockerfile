@@ -14,6 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY src/ ./src/
 COPY config/ ./config/
+COPY alembic/ ./alembic/
+COPY alembic.ini pyproject.toml ./
+COPY tests/ ./tests/
 
 # Run the bot
 CMD ["python", "-m", "src.main"]
