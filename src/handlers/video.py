@@ -19,6 +19,7 @@ from config.settings import settings
 from src.database.video import add_video_generation
 from src.services.claude import generate_response_stream
 from src.services.video_gen import generate_video, generate_video_from_image, get_video_client, upload_image_to_fal
+from src.states.video import VideoWizard
 
 logger = logging.getLogger(__name__)
 router = Router()

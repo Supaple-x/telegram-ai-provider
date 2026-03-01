@@ -11,6 +11,13 @@ from src.services.claude import FallbackError
 # Mock optional google.genai dependency (not installed locally) before handler imports
 for _mod_name in ("google.genai", "google.genai.types"):
     sys.modules.setdefault(_mod_name, MagicMock())
+
+# Mock fal_client to avoid import errors
+sys.modules.setdefault("fal_client", MagicMock())
+
+# Import VideoWizard first to avoid NameError
+from src.states.video import VideoWizard  # noqa: F401
+
 import src.handlers.messages as _msg_mod
 
 

@@ -175,7 +175,7 @@ async def _call_seedance_api(
         Dict with video result or error message string
     """
     retry_count = 0
-    
+
     while retry_count < MAX_RETRIES:
         try:
             # Run sync subscribe in thread pool (takes 30-120 seconds)
@@ -184,46 +184,51 @@ async def _call_seedance_api(
                 endpoint,
                 arguments=arguments
             )
-            
+
             if result and "video" in result and "url" in result["video"]:
                 video_url = result["video"]["url"]
                 seed = result.get("seed", 0)
-                
+
                 logger.info(f"Video generated successfully: {video_url}, seed={seed}")
-                
+
                 return {"url": video_url, "seed": seed}
-            
+
             logger.error(f"Unexpected API response: {result}")
             return "Не удалось получить видео от Seedance"
-            
-        except fal_client.RateLimitError:
-            retry_count += 1
-            if retry_count < MAX_RETRIES:
-                wait_time = RETRY_BACKOFF * (2 ** (retry_count - 1))
-                logger.warning(f"Rate limit hit, retrying in {wait_time}s... ({retry_count}/{MAX_RETRIES})")
-                await asyncio.sleep(wait_time)
-            else:
-                logger.error("Rate limit exceeded after retries")
-                return "Превышен лимит запросов. Попробуйте позже."
-                
-        except fal_client.AuthenticationError:
-            logger.error("Authentication failed", exc_info=True)
-            return "Неверный FAL_KEY"
-            
+
         except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Seedance API error: {error_msg}", exc_info=True)
+            error_msg = str(e).lower()
+            
+            # Handle rate limit errors
+            if "rate limit" in error_msg or "429" in error_msg:
+                retry_count += 1
+                if retry_count < MAX_RETRIES:
+                    wait_time = RETRY_BACKOFF * (2 ** (retry_count - 1))
+                    logger.warning(f"Rate limit hit, retrying in {wait_time}s... ({retry_count}/{MAX_RETRIES})")
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    logger.error("Rate limit exceeded after retries")
+                    return "Превышен лимит запросов. Попробуйте позже."
+            
+            # Handle authentication errors
+            if "authentication" in error_msg or "401" in error_msg or "unauthorized" in error_msg:
+                logger.error("Authentication failed", exc_info=True)
+                return "Неверный FAL_KEY"
             
             # Don't retry on validation errors
-            if "validation" in error_msg.lower() or "invalid" in error_msg.lower():
-                return f"Ошибка в параметрах: {error_msg}"
+            if "validation" in error_msg or "invalid" in error_msg:
+                logger.error(f"Validation error: {e}", exc_info=True)
+                return f"Ошибка в параметрах: {e}"
             
+            # Generic error with retry
+            logger.error(f"Seedance API error: {e}", exc_info=True)
             retry_count += 1
             if retry_count < MAX_RETRIES:
                 wait_time = RETRY_BACKOFF * (2 ** (retry_count - 1))
                 logger.warning(f"Error occurred, retrying in {wait_time}s... ({retry_count}/{MAX_RETRIES})")
                 await asyncio.sleep(wait_time)
             else:
-                return f"Ошибка генерации видео: {error_msg}"
-    
+                return f"Ошибка генерации видео: {e}"
+
     return "Ошибка генерации видео: превышено количество попыток"
