@@ -14,6 +14,7 @@ from src.services.claude import init_client
 from src.services.openai_fallback import init_openai_client
 from src.services.image_gen import init_image_client
 from src.services.transcription import init_transcription_client
+from src.services.video_gen import init_video_client
 from src.middleware import AuthMiddleware, ThrottleMiddleware
 from src.handlers import (
     commands_router,
@@ -22,6 +23,7 @@ from src.handlers import (
     voice_router,
     search_router,
     memory_router,
+    video_router,
 )
 
 # Configure logging
@@ -72,6 +74,9 @@ async def main() -> None:
     logger.info("Initializing voice transcription...")
     init_transcription_client()
 
+    logger.info("Initializing video generation...")
+    init_video_client()
+
     # Create bot and dispatcher
     bot = Bot(
         token=settings.telegram_token,
@@ -90,6 +95,7 @@ async def main() -> None:
     dp.include_router(search_router)
     dp.include_router(image_router)
     dp.include_router(voice_router)
+    dp.include_router(video_router)
     dp.include_router(messages_router)
 
     # Log access control status

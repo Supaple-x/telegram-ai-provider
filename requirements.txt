@@ -11,3 +11,4 @@ openai>=1.60.0,<2.0.0
 duckduckgo-search>=7.0.0,<8.0.0
 alembic>=1.14.0,<2.0.0
 sqlalchemy[asyncio]>=2.0.0,<3.0.0
+fal-client>=0.5.0,<1.0.0

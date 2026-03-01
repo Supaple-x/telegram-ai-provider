@@ -29,6 +29,13 @@ class Settings:
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
     image_model: str = "imagen-4.0-generate-001"
 
+    # fal.ai (video generation - Seedance 1.5 Pro)
+    fal_api_key: str = os.getenv("FAL_KEY", "")
+    seedance_model: str = "fal-ai/bytedance/seedance/v1.5/pro"
+    seedance_default_duration: str = "5"  # "5" | "8" | "10"
+    seedance_default_resolution: str = "720p"  # "720p" | "1080p"
+    seedance_default_aspect_ratio: str = "16:9"  # "16:9" | "9:16" | "1:1" | "4:3" | "3:4"
+
     # Database
     database_url: str = os.getenv(
         "DATABASE_URL", "postgresql://bot:bot_password@localhost:5432/telegram_bot"
