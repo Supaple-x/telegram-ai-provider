@@ -6,6 +6,7 @@ import sys
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
 
 from config.settings import settings
 from src.database.connection import init_db, close_db
@@ -82,7 +83,7 @@ async def main() -> None:
         token=settings.telegram_token,
         default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN),
     )
-    dp = Dispatcher()
+    dp = Dispatcher(storage=MemoryStorage())
 
     # Register middleware (order matters: auth first, then throttle)
     dp.message.outer_middleware(AuthMiddleware())

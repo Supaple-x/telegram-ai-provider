@@ -20,6 +20,31 @@ async def init_db() -> None:
     async with pool.acquire() as conn:
         await conn.execute("SELECT 1")
 
+    # Safety-net: create video_generations table if migration was not applied
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS video_generations (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
+                prompt TEXT NOT NULL,
+                mode VARCHAR(20) NOT NULL DEFAULT 'text-to-video',
+                duration VARCHAR(5) NOT NULL DEFAULT '5',
+                resolution VARCHAR(10) NOT NULL DEFAULT '720p',
+                aspect_ratio VARCHAR(10) NOT NULL DEFAULT '16:9',
+                video_url TEXT,
+                seed INTEGER,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_video_generations_user_id
+            ON video_generations(user_id)
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_video_generations_created_at
+            ON video_generations(created_at)
+        """)
+
     logger.info("Database pool initialized successfully")
 
 
