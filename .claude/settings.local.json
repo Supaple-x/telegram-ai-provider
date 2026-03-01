@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: Initial release of Telegram AI Provider Bot\n\n- Claude Sonnet 4.5 integration with professional consultant prompt\n- Vision support for image analysis\n- Document processing \\(PDF, DOCX, TXT\\)\n- Conversation context storage in PostgreSQL \\(last 20 messages\\)\n- Commands: /start, /help, /clear\n- Docker deployment with docker-compose\n- Async architecture with aiogram 3.x\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(rsync:*)",
+      "WebFetch(domain:platform.openai.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(gh api:*)",
+      "Bash(git clone:*)",
+      "Bash(wc:*)"
+    ]
+  }
+}
