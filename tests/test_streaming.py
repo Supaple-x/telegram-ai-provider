@@ -18,6 +18,9 @@ sys.modules.setdefault("fal_client", MagicMock())
 # Import VideoWizard first to avoid NameError
 from src.states.video import VideoWizard  # noqa: F401
 
+# Import video module to register routers
+import src.handlers.video  # noqa: F401
+
 import src.handlers.messages as _msg_mod
 
 

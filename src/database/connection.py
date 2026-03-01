@@ -20,8 +20,72 @@ async def init_db() -> None:
     async with pool.acquire() as conn:
         await conn.execute("SELECT 1")
 
-    # Safety-net: create video_generations table if migration was not applied
+    # Safety-net: create all tables if migrations were not applied
     async with pool.acquire() as conn:
+        # users table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                telegram_id BIGINT PRIMARY KEY,
+                username VARCHAR(255),
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        
+        # messages table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
+                role VARCHAR(20) NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_messages_user_id
+            ON messages(user_id)
+        """)
+        
+        # message_attachments table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS message_attachments (
+                id SERIAL PRIMARY KEY,
+                message_id INTEGER REFERENCES messages(id) ON DELETE CASCADE,
+                attachment_type VARCHAR(20) NOT NULL DEFAULT 'image',
+                data TEXT NOT NULL,
+                media_type VARCHAR(50) NOT NULL DEFAULT 'image/jpeg',
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_message_attachments_message_id
+            ON message_attachments(message_id)
+        """)
+        
+        # user_memory table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_memory (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
+                content VARCHAR(500) NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_user_memory_user_id
+            ON user_memory(user_id)
+        """)
+        
+        # user_preferences table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_preferences (
+                user_id BIGINT PRIMARY KEY REFERENCES users(telegram_id) ON DELETE CASCADE,
+                preferred_model VARCHAR(20) NOT NULL DEFAULT 'claude',
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        
+        # video_generations table
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS video_generations (
                 id SERIAL PRIMARY KEY,

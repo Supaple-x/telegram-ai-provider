@@ -114,15 +114,15 @@ def _get_confirm_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def _get_enhanced_prompt_keyboard(original: str, enhanced: str) -> InlineKeyboardMarkup:
+def _get_enhanced_prompt_keyboard() -> InlineKeyboardMarkup:
     """Get keyboard for choosing between original and enhanced prompt."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="📝 Оригинал", callback_data=f"video_use_prompt|{original}"),
+                InlineKeyboardButton(text="📝 Оригинал", callback_data="video_use_original"),
             ],
             [
-                InlineKeyboardButton(text="✨ Улучшенный AI", callback_data=f"video_use_prompt|{enhanced}"),
+                InlineKeyboardButton(text="✨ Улучшенный AI", callback_data="video_use_enhanced"),
             ],
             [
                 InlineKeyboardButton(text="🔙 Назад", callback_data="video_back_confirm"),
@@ -206,15 +206,16 @@ async def _quick_image_to_video(message: Message, state: FSMContext) -> None:
             parse_mode=None,
         )
         await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
-        
+
         # Upload image to fal.storage
         image_url = await upload_image_to_fal(image_data, "input.jpg")
-        
-        if isinstance(image_url, str):
+
+        # Check if upload failed (error message starts with Russian text or doesn't start with http)
+        if not image_url.startswith("http"):
             await status_msg.delete()
             await message.answer(f"❌ {image_url}", parse_mode=None)
             return
-        
+
         # Generate video
         result = await generate_video_from_image(
             prompt=caption,
@@ -224,13 +225,13 @@ async def _quick_image_to_video(message: Message, state: FSMContext) -> None:
             aspect_ratio="16:9",
             generate_audio=True,
         )
-        
+
         await status_msg.delete()
-        
+
         if isinstance(result, str):
             await message.answer(f"❌ {result}", parse_mode=None)
             return
-        
+
         await _send_video(message, result, caption, state)
 
 
@@ -466,22 +467,31 @@ async def handle_image_for_i2v(message: Message, state: FSMContext) -> None:
     )
 
 
+@router.message(Command("cancel"))
+async def cmd_cancel_video(message: Message, state: FSMContext) -> None:
+    """Cancel video generation wizard."""
+    current_state = await state.get_state()
+    if current_state and current_state.startswith("VideoWizard"):
+        await state.clear()
+        await message.answer("❌ Генерация видео отменена.", parse_mode=None)
+
+
 @router.message(VideoWizard.prompt, F.text)
 async def handle_prompt(message: Message, state: FSMContext) -> None:
     """Handle prompt input."""
     prompt = message.text.strip()
-    
+
     if prompt.lower() == "/cancel":
         await state.clear()
         await message.answer("❌ Генерация видео отменена.", parse_mode=None)
         return
-    
+
     await state.update_data(prompt=prompt)
     await state.set_state(VideoWizard.confirm)
-    
+
     data = await state.get_data()
     mode = data.get("mode", MODE_TEXT_TO_VIDEO)
-    
+
     summary = (
         f"🎬 Настройки генерации:\n\n"
         f"Режим: {'Фото → Видео' if mode == MODE_IMAGE_TO_VIDEO else 'Текст → Видео'}\n"
@@ -547,9 +557,9 @@ async def callback_enhance_prompt(callback: CallbackQuery, state: FSMContext) ->
     """Enhance prompt using Claude AI."""
     data = await state.get_data()
     original_prompt = data.get("prompt", "")
-    
+
     await callback.answer("✨ Улучшаю промпт с AI...")
-    
+
     # Build system prompt for video prompt enhancement
     system_prompt = (
         "You are a video prompt engineer. Enhance the user's video generation prompt "
@@ -557,46 +567,67 @@ async def callback_enhance_prompt(callback: CallbackQuery, state: FSMContext) ->
         "Focus on visual details, camera movement, lighting, and mood. "
         "Keep it concise (1-2 sentences). Return ONLY the enhanced prompt, no explanations."
     )
-    
+
     # Build messages for Claude
     messages = [
         {"role": "user", "content": f"Enhance this video prompt: {original_prompt}"}
     ]
-    
+
     try:
         # Generate enhanced prompt
         enhanced_parts = []
         async for chunk in generate_response_stream(messages, system_prompt=system_prompt):
             enhanced_parts.append(chunk)
-        
+
         enhanced_prompt = "".join(enhanced_parts).strip()
-        
+
         if not enhanced_prompt:
             enhanced_prompt = original_prompt
-        
+
     except Exception as e:
         logger.error(f"Prompt enhancement error: {e}", exc_info=True)
         enhanced_prompt = original_prompt
-    
+
+    # Store enhanced prompt in state
+    await state.update_data(enhanced_prompt=enhanced_prompt)
+
     # Show both options
     await callback.message.edit_text(
         f"✨ Улучшение промпта:\n\n"
         f"📝 Оригинал:\n{original_prompt}\n\n"
         f"✨ Улучшенный AI:\n{enhanced_prompt}",
         parse_mode=None,
-        reply_markup=_get_enhanced_prompt_keyboard(original_prompt, enhanced_prompt),
+        reply_markup=_get_enhanced_prompt_keyboard(),
     )
 
 
-@router.callback_query(F.data.startswith("video_use_prompt|"))
-async def callback_use_prompt(callback: CallbackQuery, state: FSMContext) -> None:
-    """Handle prompt selection (original or enhanced)."""
-    new_prompt = callback.data.split("|", 1)[1]
-    await state.update_data(prompt=new_prompt)
+@router.callback_query(F.data == "video_use_original")
+async def callback_use_original(callback: CallbackQuery, state: FSMContext) -> None:
+    """Use original prompt."""
+    data = await state.get_data()
+    original_prompt = data.get("prompt", "")
+
     await state.set_state(VideoWizard.confirm)
-    
+
     await callback.message.edit_text(
-        f"✅ Промпт обновлён:\n\n{new_prompt[:200]}",
+        f"✅ Выбран оригинальный промпт:\n\n{original_prompt[:200]}",
+        parse_mode=None,
+        reply_markup=_get_confirm_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "video_use_enhanced")
+async def callback_use_enhanced(callback: CallbackQuery, state: FSMContext) -> None:
+    """Use enhanced prompt."""
+    data = await state.get_data()
+    enhanced_prompt = data.get("enhanced_prompt", "")
+
+    await state.update_data(prompt=enhanced_prompt)
+    await state.set_state(VideoWizard.confirm)
+
+    await callback.message.edit_text(
+        f"✅ Выбран улучшенный промпт:\n\n{enhanced_prompt[:200]}",
         parse_mode=None,
         reply_markup=_get_confirm_keyboard(),
     )
@@ -633,14 +664,14 @@ async def callback_generate(callback: CallbackQuery, state: FSMContext, bot: Bot
                         parse_mode=None,
                     )
                     return
-                
+
                 image_url = await upload_image_to_fal(image_bytes, "input.jpg")
-                
-                if isinstance(image_url, str):
-                    # Error message
+
+                # Check if upload failed (error message doesn't start with http)
+                if not image_url.startswith("http"):
                     await callback.message.edit_text(f"❌ {image_url}", parse_mode=None)
                     return
-                
+
                 # Generate video from image
                 result = await generate_video_from_image(
                     prompt=prompt,
@@ -659,15 +690,15 @@ async def callback_generate(callback: CallbackQuery, state: FSMContext, bot: Bot
                     aspect_ratio=aspect_ratio,
                     generate_audio=generate_audio,
                 )
-            
+
             if isinstance(result, str):
                 # Error message
                 await callback.message.edit_text(f"❌ {result}", parse_mode=None)
                 return
-            
+
             # Send video
             await _send_video(callback.message, result, prompt, state)
-            
+
         except Exception as e:
             logger.error(f"Video generation error: {e}", exc_info=True)
             await callback.message.edit_text(
