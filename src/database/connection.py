@@ -97,6 +97,8 @@ async def init_db() -> None:
                 aspect_ratio VARCHAR(10) NOT NULL DEFAULT '16:9',
                 video_url TEXT,
                 seed INTEGER,
+                model VARCHAR(30) NOT NULL DEFAULT 'seedance',
+                source_video_url TEXT,
                 created_at TIMESTAMP DEFAULT NOW()
             )
         """)
@@ -107,6 +109,25 @@ async def init_db() -> None:
         await conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_video_generations_created_at
             ON video_generations(created_at)
+        """)
+
+        # allowed_users table (self-registration via contact sharing)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS allowed_users (
+                telegram_id BIGINT PRIMARY KEY,
+                phone VARCHAR(20) NOT NULL,
+                username VARCHAR(255),
+                approved_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
+        # service_status table (balance tracking)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS service_status (
+                service_name VARCHAR(30) PRIMARY KEY,
+                balance_ok BOOLEAN NOT NULL DEFAULT TRUE,
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
         """)
 
     logger.info("Database pool initialized successfully")

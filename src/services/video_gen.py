@@ -5,6 +5,7 @@ from typing import Any
 import fal_client
 
 from config.settings import settings
+from src.database.service_status import set_balance_ok
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,34 @@ IMAGE_TO_VIDEO_ENDPOINT = "fal-ai/bytedance/seedance/v1.5/pro/image-to-video"
 # Retry settings
 MAX_RETRIES = 3
 RETRY_BACKOFF = 1.0  # seconds
+
+# Balance tracking (resets on restart)
+_balance_ok = True
+
+
+def is_available() -> bool:
+    """Check if fal.ai has key and no known billing issues."""
+    return bool(settings.fal_api_key) and _balance_ok
+
+
+def mark_balance_exhausted() -> None:
+    """Mark fal.ai as having exhausted balance (in-memory + DB)."""
+    global _balance_ok
+    _balance_ok = False
+    logger.warning("fal.ai marked as balance exhausted")
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_persist_balance("fal", False))
+    except RuntimeError:
+        pass
+
+
+async def _persist_balance(service: str, ok: bool) -> None:
+    """Persist balance status to DB (fire-and-forget)."""
+    try:
+        await set_balance_ok(service, ok)
+    except Exception as e:
+        logger.warning(f"Failed to persist balance status: {e}")
 
 
 def init_video_client() -> bool:
@@ -62,10 +91,12 @@ async def upload_image_to_fal(image_bytes: bytes, filename: str) -> str:
         logger.info(f"Uploading image {filename} to fal.storage...")
         
         # Run sync upload in thread pool
+        # fal_client.upload(data, content_type, file_name)
         url = await asyncio.to_thread(
             fal_client.upload,
+            image_bytes,
+            "image/jpeg",
             filename,
-            image_bytes
         )
         
         logger.info(f"Image uploaded successfully: {url}")
@@ -75,12 +106,67 @@ async def upload_image_to_fal(image_bytes: bytes, filename: str) -> str:
         error_msg = str(e)
         logger.error(f"Image upload error: {error_msg}", exc_info=True)
         
-        if "authentication" in error_msg.lower() or "401" in error_msg:
+        lower = error_msg.lower()
+        if "authentication" in lower or "401" in error_msg:
             return "Неверный FAL_KEY"
-        elif "rate limit" in error_msg.lower() or "429" in error_msg:
+        elif "rate limit" in lower or "429" in error_msg:
             return "Превышен лимит загрузки файлов"
-        
+        elif "locked" in lower or "balance" in lower or "billing" in lower:
+            mark_balance_exhausted()
+            return (
+                "💰 Баланс fal.ai исчерпан.\n\n"
+                "Генерация видео временно недоступна. "
+                "Администратору необходимо пополнить баланс на fal.ai/dashboard/billing"
+            )
+
         return f"Ошибка загрузки изображения: {error_msg}"
+
+
+async def upload_video_to_fal(video_bytes: bytes, filename: str = "input.mp4") -> str:
+    """
+    Upload video to fal.ai storage and get public URL.
+    Used for Kling O3 (EvoLink) which needs a public video URL.
+
+    Args:
+        video_bytes: Video data as bytes
+        filename: Filename with extension
+
+    Returns:
+        Public URL of uploaded video or error message string
+    """
+    if not settings.fal_api_key:
+        return "fal.ai не настроен (отсутствует FAL_KEY)"
+
+    try:
+        logger.info(f"Uploading video {filename} ({len(video_bytes)} bytes) to fal.storage...")
+
+        url = await asyncio.to_thread(
+            fal_client.upload,
+            video_bytes,
+            "video/mp4",
+            filename,
+        )
+
+        logger.info(f"Video uploaded successfully: {url}")
+        return url
+
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Video upload error: {error_msg}", exc_info=True)
+
+        lower = error_msg.lower()
+        if "authentication" in lower or "401" in error_msg:
+            return "Неверный FAL_KEY"
+        elif "rate limit" in lower or "429" in error_msg:
+            return "Превышен лимит загрузки файлов"
+        elif "locked" in lower or "balance" in lower or "billing" in lower:
+            mark_balance_exhausted()
+            return (
+                "Баланс fal.ai исчерпан.\n\n"
+                "Генерация видео временно недоступна. "
+                "Администратору необходимо пополнить баланс на fal.ai/dashboard/billing"
+            )
+        return f"Ошибка загрузки видео: {error_msg}"
 
 
 async def generate_video(
@@ -215,7 +301,17 @@ async def _call_seedance_api(
             if "authentication" in error_msg or "401" in error_msg or "unauthorized" in error_msg:
                 logger.error("Authentication failed", exc_info=True)
                 return "Неверный FAL_KEY"
-            
+
+            # Handle billing / balance errors (don't retry)
+            if "locked" in error_msg or "balance" in error_msg or "billing" in error_msg:
+                logger.error(f"Billing error: {e}", exc_info=True)
+                mark_balance_exhausted()
+                return (
+                    "💰 Баланс fal.ai исчерпан.\n\n"
+                    "Генерация видео временно недоступна. "
+                    "Администратору необходимо пополнить баланс на fal.ai/dashboard/billing"
+                )
+
             # Don't retry on validation errors
             if "validation" in error_msg or "invalid" in error_msg:
                 logger.error(f"Validation error: {e}", exc_info=True)
