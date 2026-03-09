@@ -10,6 +10,7 @@ from src.services.video_gen import (
     get_video_client,
     init_video_client,
     upload_image_to_fal,
+    upload_video_to_fal,
 )
 
 
@@ -247,3 +248,40 @@ class TestGenerateVideoFromImage:
                 assert call_args[1]["arguments"]["image_url"] == "https://image.jpg"
                 assert call_args[1]["arguments"]["duration"] == "5"
                 assert call_args[1]["arguments"]["resolution"] == "720p"
+
+
+class TestUploadVideoToFal:
+    """Tests for video upload to fal.storage."""
+
+    @pytest.mark.asyncio
+    async def test_upload_video_success(self, mock_settings):
+        mock_settings.fal_api_key = "test-key"
+
+        with patch("src.services.video_gen.settings", mock_settings):
+            with patch("src.services.video_gen.asyncio.to_thread") as mock_to_thread:
+                mock_to_thread.return_value = "https://fal.storage/video.mp4"
+
+                result = await upload_video_to_fal(b"fake video data", "video.mp4")
+
+                assert result == "https://fal.storage/video.mp4"
+                mock_to_thread.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_upload_video_without_key(self, mock_settings):
+        mock_settings.fal_api_key = ""
+
+        with patch("src.services.video_gen.settings", mock_settings):
+            result = await upload_video_to_fal(b"data", "video.mp4")
+            assert "не настроен" in result
+
+    @pytest.mark.asyncio
+    async def test_upload_video_billing_error(self, mock_settings):
+        mock_settings.fal_api_key = "test-key"
+
+        with patch("src.services.video_gen.settings", mock_settings):
+            with patch("src.services.video_gen.asyncio.to_thread") as mock_to_thread:
+                with patch("src.services.video_gen.set_balance_ok", new_callable=AsyncMock):
+                    mock_to_thread.side_effect = Exception("User is locked. Reason: Exhausted balance")
+
+                    result = await upload_video_to_fal(b"data", "video.mp4")
+                    assert "Баланс" in result or "исчерпан" in result

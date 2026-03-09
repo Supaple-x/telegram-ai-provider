@@ -5,6 +5,7 @@ from src.handlers.voice import router as voice_router
 from src.handlers.search import router as search_router
 from src.handlers.memory import router as memory_router
 from src.handlers.video import router as video_router
+from src.handlers.auth import router as auth_router
 
 __all__ = [
     "commands_router",
@@ -14,4 +15,5 @@ __all__ = [
     "search_router",
     "memory_router",
     "video_router",
+    "auth_router",
 ]

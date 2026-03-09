@@ -25,6 +25,9 @@ def mock_settings():
     s.messages_ttl_days = 30
     s.stream_edit_interval = 1.5
     s.whisper_model = "whisper-1"
+    s.fal_api_key = ""
+    s.wavespeed_api_key = ""
+    s.evolink_api_key = ""
     return s
 
 

@@ -6,7 +6,10 @@ class VideoWizard(StatesGroup):
     
     # Step 1: Choose mode (text-to-video / image-to-video)
     mode = State()
-    
+
+    # Step 1b: Choose model for image-to-video (Seedance / Kling O3)
+    i2v_model = State()
+
     # Step 2: Aspect ratio (16:9 / 9:16 / 1:1)
     aspect_ratio = State()
     
@@ -21,6 +24,14 @@ class VideoWizard(StatesGroup):
     
     # Step 6: Prompt input (or image for image-to-video)
     prompt = State()
-    
+
+    # Step 6b: AI style suggestions for image-to-video
+    style_select = State()
+
     # Step 7: Confirm and AI prompt enhancement
     confirm = State()
+
+    # Video-to-video specific states
+    v2v_model = State()         # Choose Wan 2.2 / Kling O3
+    v2v_video_upload = State()  # Waiting for user to send a video file
+    v2v_strength = State()      # Wan 2.2 only: transformation strength

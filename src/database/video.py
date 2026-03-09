@@ -15,6 +15,8 @@ async def add_video_generation(
     aspect_ratio: str = "16:9",
     video_url: str | None = None,
     seed: int | None = None,
+    model: str = "seedance",
+    source_video_url: str | None = None,
 ) -> int:
     """
     Add video generation record to database.
@@ -22,25 +24,28 @@ async def add_video_generation(
     Args:
         telegram_id: Telegram user ID
         prompt: Video prompt text
-        mode: 'text-to-video' or 'image-to-video'
+        mode: 'text-to-video', 'image-to-video', or 'video-to-video'
         duration: Video duration ("5" | "8" | "10")
-        resolution: Video resolution ("720p" | "1080p")
+        resolution: Video resolution ("720p" | "1080p" | "480p")
         aspect_ratio: Aspect ratio ("16:9" | "9:16" | "1:1" | "4:3" | "3:4")
         video_url: URL of generated video
         seed: Random seed used for generation
+        model: Model used ("seedance" | "wan2.2" | "kling_o3")
+        source_video_url: URL of source video for v2v
 
     Returns:
         ID of created record
     """
     pool = get_pool()
-    
+
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
             INSERT INTO video_generations (
-                user_id, prompt, mode, duration, resolution, aspect_ratio, video_url, seed
+                user_id, prompt, mode, duration, resolution, aspect_ratio,
+                video_url, seed, model, source_video_url
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING id
             """,
             telegram_id,
@@ -51,9 +56,11 @@ async def add_video_generation(
             aspect_ratio,
             video_url,
             seed,
+            model,
+            source_video_url,
         )
-        
-        logger.info(f"Added video generation record: id={row['id']}, user={telegram_id}")
+
+        logger.info(f"Added video generation record: id={row['id']}, user={telegram_id}, model={model}")
         return row["id"]
 
 
@@ -100,7 +107,8 @@ async def get_user_video_history(
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT id, prompt, mode, duration, resolution, aspect_ratio, video_url, seed, created_at
+            SELECT id, prompt, mode, duration, resolution, aspect_ratio,
+                   video_url, seed, model, source_video_url, created_at
             FROM video_generations
             WHERE user_id = $1
             ORDER BY created_at DESC
@@ -128,7 +136,8 @@ async def get_video_generation(record_id: int) -> dict[str, Any] | None:
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT id, prompt, mode, duration, resolution, aspect_ratio, video_url, seed, created_at
+            SELECT id, prompt, mode, duration, resolution, aspect_ratio,
+                   video_url, seed, model, source_video_url, created_at
             FROM video_generations
             WHERE id = $1
             """,
