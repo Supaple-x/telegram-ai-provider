@@ -25,9 +25,9 @@ class Settings:
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     openai_model: str = "gpt-5.2"
 
-    # Google GenAI (image generation)
+    # Google GenAI (image generation — Nano Banana, free tier)
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-    image_model: str = "imagen-4.0-generate-001"
+    image_model: str = "gemini-2.5-flash-image"
 
     # fal.ai (video generation - Seedance 1.5 Pro)
     fal_api_key: str = os.getenv("FAL_KEY", "")
@@ -35,6 +35,12 @@ class Settings:
     seedance_default_duration: str = "5"  # "5" | "8" | "10"
     seedance_default_resolution: str = "720p"  # "720p" | "1080p"
     seedance_default_aspect_ratio: str = "16:9"  # "16:9" | "9:16" | "1:1" | "4:3" | "3:4"
+
+    # WaveSpeedAI (video-to-video - Wan 2.2)
+    wavespeed_api_key: str = os.getenv("WAVESPEED_API_KEY", "")
+
+    # EvoLink (video-to-video - Kling O3)
+    evolink_api_key: str = os.getenv("EVOLINK_API_KEY", "")
 
     # Database
     database_url: str = os.getenv(
