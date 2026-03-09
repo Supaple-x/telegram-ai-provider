@@ -7,17 +7,23 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand
 
 from config.settings import settings
 from src.database.connection import init_db, close_db
 from src.database.context import cleanup_old_messages
+from src.database.allowed_users import load_approved_users
+from src.database.service_status import load_all_balance_states
 from src.services.claude import init_client
 from src.services.openai_fallback import init_openai_client
 from src.services.image_gen import init_image_client
 from src.services.transcription import init_transcription_client
-from src.services.video_gen import init_video_client
+from src.services import video_gen as video_gen_svc
+from src.services import wavespeed as wavespeed_svc
+from src.services import evolink as evolink_svc
 from src.middleware import AuthMiddleware, ThrottleMiddleware
 from src.handlers import (
+    auth_router,
     commands_router,
     messages_router,
     image_router,
@@ -76,7 +82,31 @@ async def main() -> None:
     init_transcription_client()
 
     logger.info("Initializing video generation...")
-    init_video_client()
+    video_gen_svc.init_video_client()
+
+    logger.info("Initializing WaveSpeedAI (Wan 2.2 v2v)...")
+    wavespeed_svc.init_wavespeed_client()
+
+    logger.info("Initializing EvoLink (Kling O3 v2v)...")
+    evolink_svc.init_evolink_client()
+
+    # Load approved users cache
+    approved_count = await load_approved_users()
+    if approved_count:
+        logger.info(f"Loaded {approved_count} approved users from DB")
+
+    # Load persisted balance states from DB
+    logger.info("Loading service balance states...")
+    balance_states = await load_all_balance_states()
+    if not balance_states.get("fal", True):
+        video_gen_svc._balance_ok = False
+        logger.warning("fal.ai balance: exhausted (from DB)")
+    if not balance_states.get("evolink", True):
+        evolink_svc._balance_ok = False
+        logger.warning("EvoLink balance: exhausted (from DB)")
+    if not balance_states.get("wavespeed", True):
+        wavespeed_svc._balance_ok = False
+        logger.warning("WaveSpeedAI balance: exhausted (from DB)")
 
     # Create bot and dispatcher
     bot = Bot(
@@ -90,7 +120,8 @@ async def main() -> None:
     dp.callback_query.outer_middleware(AuthMiddleware())
     dp.message.outer_middleware(ThrottleMiddleware())
 
-    # Register routers (order matters: commands first, then specialized, then catch-all text)
+    # Register routers (order matters: auth first, commands, then specialized, then catch-all text)
+    dp.include_router(auth_router)
     dp.include_router(commands_router)
     dp.include_router(memory_router)
     dp.include_router(search_router)
@@ -101,7 +132,10 @@ async def main() -> None:
 
     # Log access control status
     if settings.allowed_users:
-        logger.info(f"Access control: {len(settings.allowed_users)} allowed users")
+        logger.info(
+            f"Access control: {len(settings.allowed_users)} env users"
+            f" + {approved_count} DB-approved (contact registration enabled)"
+        )
     else:
         logger.warning("Access control: DISABLED (any user can access the bot)")
 
@@ -142,6 +176,20 @@ async def main() -> None:
         except NotImplementedError:
             # Windows doesn't support add_signal_handler
             pass
+
+    # Set bot commands menu
+    await bot.set_my_commands([
+        BotCommand(command="search", description="Поиск в интернете"),
+        BotCommand(command="imagine", description="Сгенерировать изображение"),
+        BotCommand(command="video", description="Сгенерировать видео"),
+        BotCommand(command="remember", description="Запомнить факт"),
+        BotCommand(command="memories", description="Список запомненного"),
+        BotCommand(command="forget", description="Забыть факт"),
+        BotCommand(command="model", description="Переключить модель AI"),
+        BotCommand(command="clear", description="Очистить контекст диалога"),
+        BotCommand(command="stats", description="Статистика бота"),
+        BotCommand(command="help", description="Показать справку"),
+    ])
 
     try:
         logger.info("Starting bot...")
